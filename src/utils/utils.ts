@@ -1,25 +1,27 @@
 import type { McpConfig, ServerEntry } from "../config/types.ts";
 import { interpolateEnvVars } from "./env.ts";
 
-export async function parallelLimit<T>(
+export async function parallelLimit<T, R = void>(
   items: T[],
   limit: number,
-  fn: (item: T, index: number) => Promise<void>
-): Promise<void> {
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
   if (limit <= 0) {
     limit = items.length || 1;
   }
   let index = 0;
+  const results: R[] = new Array(items.length);
 
   async function worker() {
     while (index < items.length) {
       const i = index++;
-      await fn(items[i], i);
+      results[i] = await fn(items[i], i);
     }
   }
 
   const workers = Array(Math.min(limit, items.length)).fill(null).map(() => worker());
   await Promise.all(workers);
+  return results;
 }
 
 export function getConfigFromArgv(): string | undefined {
