@@ -1,6 +1,6 @@
 # mcp-tool-search
 
-A standalone MCP (Model Context Protocol) gateway/proxy server that lets any MCP-compatible client (Cursor, Claude Code, Codex, VSCode, Windsurf, Claude Desktop) search and call tools across multiple downstream MCP servers through a single `mcp` proxy tool.
+A standalone MCP (Model Context Protocol) gateway/proxy server that lets any MCP-compatible client (Cursor, Claude Code, Codex, VSCode, Windsurf, Claude Desktop, Pi) search and call tools across multiple downstream MCP servers through a single `mcp` proxy tool.
 
 ## Features
 
@@ -13,6 +13,7 @@ A standalone MCP (Model Context Protocol) gateway/proxy server that lets any MCP
 - Output guarding (50KiB / 2000 line truncation)
 - Config compatible with standard MCP `mcpServers` format
 - stdio transport only (all clients supported)
+- Builds with [tsup](https://github.com/egoist/tsup) (esbuild) — keeps `.ts` import extensions in source, compiles to single-file `.js` bundle
 
 ## Quick Start
 
@@ -22,9 +23,18 @@ A standalone MCP (Model Context Protocol) gateway/proxy server that lets any MCP
 npm install -g mcp-tool-search
 ```
 
+Or build from source:
+
+```bash
+git clone https://github.com/ericnunes30/mcp-gateway-proxy.git
+cd mcp-gateway-proxy
+npm install
+npm run build
+```
+
 ### Configuration
 
-Create a config file (e.g., `~/.config/mcp-tool-search/config.json`):
+Create a config file at `~/.config/mcp-tool-search/config.json`:
 
 ```json
 {
@@ -35,10 +45,19 @@ Create a config file (e.g., `~/.config/mcp-tool-search/config.json`):
     },
     "github": {
       "url": "https://api.github.com/mcp",
-      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
-    }
+      "headers": { "Authorization": "Bearer YOUR_TOKEN"    }
   }
 }
+```
+
+### CLI Usage
+
+```bash
+# Using --mcp-config (preferred)
+node dist/cli.js --mcp-config ~/.config/mcp-tool-search/config.json
+
+# --config also works as an alias
+node dist/cli.js --config ~/.config/mcp-tool-search/config.json
 ```
 
 ### Client Configuration
@@ -86,6 +105,28 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
+#### Pi (with [pi-mcp-extension](https://github.com/irahardianto/pi-mcp-extension))
+
+Add to `~/.pi/agent/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-tool-search": {
+      "command": "node",
+      "args": ["/path/to/mcp-gateway-proxy/dist/cli.js", "--mcp-config", "/path/to/config.json"],
+      "lifecycle": "eager"
+    }
+  }
+}
+```
+
+The proxy connects to all your downstream MCP servers. The Pi extension only needs to know about the proxy — no duplication of tools.
+
+```
+Pi agent → pi-mcp-extension → mcp-tool-search (proxy) → N downstream servers
+```
+
 ## Proxy Tool Usage
 
 The `mcp` tool accepts these parameters:
@@ -115,6 +156,32 @@ mcp({ action: "auth-start", server: "linear" })      → Start OAuth
 mcp({ action: "auth-complete", server: "linear", args: '{"redirectUrl":"..."}' }) → Complete OAuth
 ```
 
+### Example Output
+
+```
+mcp({}) →
+MCP: 2/5 servers, 38 tools
+
+✓ chrome-devtools (29 tools)
+✓ pencil (9 tools)
+○ stitch (not connected)
+○ tavily (not connected)
+○ computer-use (not connected)
+```
+
+```
+mcp({ search: "screenshot" }) →
+Found 3 tools matching "screenshot":
+
+chrome_devtools_take_screenshot
+  Take a screenshot of the page or element.
+  Parameters: format, quality, uid, fullPage, filePath
+
+pencil_get_screenshot
+  Returns a screenshot of a node in a .pen file.
+  Parameters: filePath, nodeId
+```
+
 ## Configuration Reference
 
 ### Server Entry
@@ -127,6 +194,7 @@ mcp({ action: "auth-complete", server: "linear", args: '{"redirectUrl":"..."}' }
 | `url` | string | HTTP/SSE/StreamableHTTP URL |
 | `headers` | Record<string,string> | HTTP headers |
 | `transport` | "stdio" \| "http" \| "sse" \| "streamable-http" | Transport type |
+| `type` | "http" | Alias for transport (standard MCP compatibility) |
 | `oauth` | object | OAuth configuration |
 | `lifecycle` | "lazy" \| "eager" \| "keep-alive" | Connection mode |
 | `idleTimeout` | number | Idle timeout (seconds) |
@@ -137,6 +205,7 @@ mcp({ action: "auth-complete", server: "linear", args: '{"redirectUrl":"..."}' }
 | `requestTimeoutMs` | number | Request timeout |
 | `autoAuth` | boolean | Auto-start OAuth |
 | `bearerToken` | string | Bearer token |
+| `bearerTokenEnv` | string | Env var name for bearer token |
 
 ### Settings (top-level)
 
@@ -150,13 +219,14 @@ mcp({ action: "auth-complete", server: "linear", args: '{"redirectUrl":"..."}' }
 | `disableProxyTool` | boolean | Disable proxy tool |
 | `authRequiredMessage` | string | Custom auth message |
 
-### Environment
+### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `MCP_TOOL_SEARCH_DEBUG` | Enable debug logging |
-| `MCP_TOOL_SEARCH_DATA_DIR` | Data directory override |
-| `MCP_DIRECT_TOOLS` | Direct tools filter |
+| `MCP_TOOL_SEARCH_DEBUG` | Enable debug logging to stderr |
+| `MCP_TOOL_SEARCH_DATA_DIR` | Data directory override (default: `~/.config/mcp-tool-search/`) |
+| `MCP_DIRECT_TOOLS` | Direct tools filter (comma-separated, `server/tool` or `server`) |
+| `MCP_TOOL_SEARCH_NPX_CACHE_TTL` | npx cache TTL in ms (default: 24h) |
 
 ## Architecture
 
@@ -177,9 +247,63 @@ mcp({ action: "auth-complete", server: "linear", args: '{"redirectUrl":"..."}' }
 ## Development
 
 ```bash
-npm install
-npm run build
-npm test
+npm install      # Install dependencies
+npm run build    # Build with tsup → dist/cli.js
+npm run typecheck # Type-check with tsc (no emit)
+npm test         # Run vitest test suite (84 tests)
+```
+
+### Build System
+
+The project uses [tsup](https://github.com/egoist/tsup) (powered by esbuild) for compilation:
+
+- **Source code** uses `.ts` import extensions (e.g., `import { foo } from "./types.ts"`)
+- **tsconfig.json** has `noEmit: true` for type-checking only
+- **tsup** bundles everything into a single `dist/cli.js` file (~150KB)
+- Dependencies (`@modelcontextprotocol/sdk`, `open`, `recheck`, `typebox`, `zod`) are externalized
+
+### Project Structure
+
+```
+src/
+├── cli.ts                    # CLI entry point
+├── server.ts                 # MCP server setup + stdio transport
+├── state.ts                  # Gateway state factory
+├── config/
+│   ├── types.ts              # Config types (McpConfig, ServerEntry, etc.)
+│   ├── config.ts             # Config loader + merge logic
+│   ├── imports.ts            # Config imports/expand logic
+│   └── paths.ts              # Config path resolution
+├── cache/
+│   ├── metadata-cache.ts     # Metadata cache (hash-based invalidation)
+│   └── tool-metadata.ts      # Tool metadata builder + search
+├── auth/
+│   ├── auth-store.ts         # Token storage (secure file permissions)
+│   ├── oauth-provider.ts     # OAuth client provider
+│   ├── oauth-flow.ts         # OAuth flow (start, complete, authenticate)
+│   └── callback-server.ts    # OAuth callback HTTP server
+├── mcp/
+│   ├── server-manager.ts     # MCP server connection manager
+│   ├── transport.ts          # Transport creation (stdio/HTTP/SSE/StreamableHTTP)
+│   └── npx-resolver.ts       # npx package resolution (skip npm parent)
+├── lifecycle/
+│   ├── lifecycle.ts          # Lifecycle manager (lazy/eager/keep-alive)
+│   └── lazy-connect.ts       # Lazy connect with 60s failure backoff
+├── guard/
+│   └── output-guard.ts       # Output truncation (50KiB / 2000 lines)
+├── tools/
+│   ├── proxy.ts              # Proxy tool definition + dispatch
+│   ├── proxy-actions.ts      # Proxy action handlers (search/describe/call/etc.)
+│   ├── direct-tools.ts       # Direct tool resolution + executor
+│   └── tool-registrar.ts     # MCP content transformation
+├── handlers/
+│   ├── list-tools.ts         # ListToolsRequest handler
+│   └── call-tool.ts          # CallToolRequest handler
+└── utils/
+    ├── abort.ts              # AbortSignal utilities
+    ├── logger.ts             # stderr-only logger
+    ├── env.ts                # Environment variable interpolation
+    └── utils.ts              # General utilities (parallelLimit, etc.)
 ```
 
 ## License
