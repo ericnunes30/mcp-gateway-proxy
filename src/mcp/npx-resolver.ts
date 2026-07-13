@@ -25,7 +25,7 @@ export interface NpxResolution {
   isJs: boolean;
 }
 
-interface ParsedInvocation {
+export interface ParsedInvocation {
   packageSpec: string;
   binName?: string;
   extraArgs: string[];
@@ -200,6 +200,7 @@ function resolveFromNpmCache(packageSpec: string, binName?: string): NpxCacheEnt
         break;
       }
     }
+    // Fallback to first bin entry when explicit binName doesn't match — matches pi-mcp-adapter reference behavior
     if (!binRel) {
       const firstEntry = Object.entries(binField)[0];
       if (firstEntry) {
