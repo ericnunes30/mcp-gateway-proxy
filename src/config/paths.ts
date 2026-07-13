@@ -2,12 +2,13 @@
 import { homedir } from "node:os";
 import { join, resolve, isAbsolute } from "node:path";
 import { existsSync } from "node:fs";
+import { resolveConfigPath } from "../utils/env.ts";
 import type { ImportKind } from "./types.ts";
 
 // Data directory override via env var
 export function getDataDir(): string {
   const envOverride = process.env.MCP_TOOL_SEARCH_DATA_DIR;
-  if (envOverride) return resolve(envOverride);
+  if (envOverride) return resolve(resolveConfigPath(envOverride) ?? envOverride);
   return join(homedir(), ".config", "mcp-tool-search");
 }
 
@@ -20,7 +21,7 @@ export function getSharedGlobalConfigPath(): string {
 }
 
 export function getToolGlobalConfigPath(overridePath?: string): string {
-  if (overridePath) return resolve(overridePath);
+  if (overridePath) return resolve(resolveConfigPath(overridePath) ?? overridePath);
   return TOOL_GLOBAL_CONFIG_PATH;
 }
 
