@@ -1,0 +1,171 @@
+{
+  "id": "plan-1783967131124",
+  "name": "mcp-gateway-proxy",
+  "source": "spec:01.mcp-gateway-proxy",
+  "status": "active",
+  "created": "2026-07-13",
+  "updated": "2026-07-13",
+  "tasks": [
+    {
+      "id": "T1",
+      "desc": "Project Scaffolding",
+      "status": "in_progress",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T2",
+      "desc": "Config Types",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T3",
+      "desc": "Utils",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T4",
+      "desc": "Config Paths",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T5",
+      "desc": "Config Loader + Imports",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T6",
+      "desc": "Metadata Cache",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T7",
+      "desc": "Tool Metadata",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T8",
+      "desc": "Auth Store",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T9",
+      "desc": "OAuth Flow",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T10",
+      "desc": "npx Resolver",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T11",
+      "desc": "Server Manager",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T12",
+      "desc": "Lifecycle Manager",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T13",
+      "desc": "Lazy Connect",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T14",
+      "desc": "Output Guard",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T15",
+      "desc": "Tool Registrar",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T16",
+      "desc": "Proxy Actions",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T17",
+      "desc": "Direct Tools",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T18",
+      "desc": "Proxy Tool + Dispatch",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T19",
+      "desc": "State",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T20",
+      "desc": "MCP Server + Handlers",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T21",
+      "desc": "CLI",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T22",
+      "desc": "Tests",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    },
+    {
+      "id": "T23",
+      "desc": "README",
+      "status": "pending",
+      "source": "spec",
+      "dependencies": []
+    }
+  ]
+}
