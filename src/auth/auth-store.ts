@@ -13,6 +13,9 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node
 import { join } from 'node:path';
 import { getOAuthDir } from '../config/paths.ts';
 
+/** Buffer in seconds to account for clock skew and network latency when checking token expiry */
+const TOKEN_EXPIRY_BUFFER_SECONDS = 60;
+
 /** OAuth token storage format */
 export interface StoredTokens {
   accessToken: string;
@@ -261,7 +264,7 @@ export function isTokenExpired(serverName: string): boolean | null {
   const entry = getAuthEntry(serverName);
   if (!entry?.tokens) return null;
   if (!entry.tokens.expiresAt) return false;
-  return entry.tokens.expiresAt < Date.now() / 1000;
+  return entry.tokens.expiresAt < (Date.now() / 1000 + TOKEN_EXPIRY_BUFFER_SECONDS);
 }
 
 /**
