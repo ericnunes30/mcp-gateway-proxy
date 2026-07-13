@@ -47,12 +47,14 @@ export class McpLifecycleManager {
   
   startHealthChecks(intervalMs = 30000): void {
     this.healthCheckInterval = setInterval(() => {
-      this.checkConnections();
+      this.checkConnections().catch(error => {
+        logger.error("MCP: Health check failed", error instanceof Error ? error : new Error(String(error)));
+      });
     }, intervalMs);
     this.healthCheckInterval.unref();
   }
   
-  private async checkConnections(): Promise<void> {
+  async checkConnections(): Promise<void> {
     for (const [name, definition] of this.keepAliveServers) {
       const connection = this.manager.getConnection(name);
       
@@ -63,7 +65,7 @@ export class McpLifecycleManager {
           // Notify extension to update metadata
           this.onReconnect?.(name);
         } catch (error) {
-          console.error(`MCP: Failed to reconnect to ${name}:`, error);
+          logger.error(`MCP: Failed to reconnect to ${name}:`, error instanceof Error ? error : new Error(String(error)));
         }
       }
     }
@@ -78,7 +80,7 @@ export class McpLifecycleManager {
     }
   }
 
-  private getIdleTimeout(name: string): number {
+  getIdleTimeout(name: string): number {
     const perServer = this.serverSettings.get(name)?.idleTimeout;
     if (perServer !== undefined) return perServer * 60 * 1000;
     return this.globalIdleTimeout;
@@ -87,6 +89,7 @@ export class McpLifecycleManager {
   async gracefulShutdown(): Promise<void> {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
     }
     await this.manager.closeAll();
   }
