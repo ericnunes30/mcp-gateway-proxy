@@ -6,6 +6,9 @@ export async function parallelLimit<T>(
   limit: number,
   fn: (item: T, index: number) => Promise<void>
 ): Promise<void> {
+  if (limit <= 0) {
+    limit = items.length || 1;
+  }
   let index = 0;
 
   async function worker() {

@@ -84,7 +84,7 @@ class Logger {
     } else if (level === "warn") {
       console.warn(fullMessage);
     } else if (level === "debug") {
-      console.debug(fullMessage);
+      console.error(fullMessage);
     } else {
       // info — must also go to stderr, never stdout
       console.error(fullMessage);
