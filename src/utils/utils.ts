@@ -25,9 +25,12 @@ export async function parallelLimit<T, R = void>(
 }
 
 export function getConfigFromArgv(): string | undefined {
-  const idx = process.argv.indexOf("--config");
-  if (idx >= 0 && idx + 1 < process.argv.length) {
-    return process.argv[idx + 1];
+  // Support both --config and --mcp-config flags
+  for (const flag of ["--mcp-config", "--config"]) {
+    const idx = process.argv.indexOf(flag);
+    if (idx >= 0 && idx + 1 < process.argv.length) {
+      return process.argv[idx + 1];
+    }
   }
   return undefined;
 }
