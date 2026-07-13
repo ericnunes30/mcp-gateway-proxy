@@ -1,1 +1,199 @@
-export {};
+// metadata-cache.ts - Persistent MCP metadata cache
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { createHash } from "node:crypto";
+import type { McpTool, McpResource, ServerEntry, ToolMetadata } from "../config/types.ts";
+import { formatToolName, isToolExcluded } from "../config/types.ts";
+import { interpolateEnvRecord, resolveConfigPath } from "../utils/env.ts";
+import { resolveBearerToken } from "../utils/utils.ts";
+import { getCachePath } from "../config/paths.ts";
+
+const CACHE_VERSION = 1;
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface CachedTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  uiResourceUri?: string; // Kept for compatibility, always undefined in standalone
+}
+
+export interface CachedResource {
+  uri: string;
+  name: string;
+  description?: string;
+}
+
+export interface ServerCacheEntry {
+  configHash: string;
+  tools: CachedTool[];
+  resources: CachedResource[];
+  cachedAt: number;
+}
+
+export interface MetadataCache {
+  version: number;
+  servers: Record<string, ServerCacheEntry>;
+}
+
+export function getMetadataCachePath(): string {
+  return getCachePath();
+}
+
+export function loadMetadataCache(): MetadataCache | null {
+  const cachePath = getMetadataCachePath();
+  if (!existsSync(cachePath)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(cachePath, "utf-8"));
+    if (!raw || typeof raw !== "object") return null;
+    if (raw.version !== CACHE_VERSION) return null;
+    if (!raw.servers || typeof raw.servers !== "object") return null;
+    return raw as MetadataCache;
+  } catch {
+    return null;
+  }
+}
+
+export function saveMetadataCache(cache: MetadataCache): void {
+  const cachePath = getMetadataCachePath();
+  const dir = dirname(cachePath);
+  mkdirSync(dir, { recursive: true });
+
+  let merged: MetadataCache = { version: CACHE_VERSION, servers: {} };
+  try {
+    if (existsSync(cachePath)) {
+      const existing = JSON.parse(readFileSync(cachePath, "utf-8")) as MetadataCache;
+      if (existing && existing.version === CACHE_VERSION && existing.servers) {
+        merged.servers = { ...existing.servers };
+      }
+    }
+  } catch {
+    // Ignore parse errors and proceed with empty cache
+  }
+
+  merged.version = CACHE_VERSION;
+  merged.servers = { ...merged.servers, ...cache.servers };
+
+  const tmpPath = `${cachePath}.${process.pid}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(merged, null, 2), "utf-8");
+  renameSync(tmpPath, cachePath);
+}
+
+export function computeServerHash(definition: ServerEntry): string {
+  const identity: Record<string, unknown> = {
+    command: definition.command,
+    args: definition.args,
+    env: interpolateEnvRecord(definition.env),
+    cwd: resolveConfigPath(definition.cwd),
+    url: definition.url,
+    headers: interpolateEnvRecord(definition.headers),
+    auth: definition.auth,
+    bearerToken: resolveBearerToken(definition),
+    bearerTokenEnv: definition.bearerTokenEnv,
+    exposeResources: definition.exposeResources,
+    excludeTools: definition.excludeTools,
+  };
+  const normalized = stableStringify(identity);
+  return createHash("sha256").update(normalized).digest("hex");
+}
+
+export function isServerCacheValid(
+  entry: ServerCacheEntry,
+  definition: ServerEntry,
+  maxAgeMs: number = CACHE_MAX_AGE_MS
+): boolean {
+  if (!entry || entry.configHash !== computeServerHash(definition)) return false;
+  if (!entry.cachedAt || typeof entry.cachedAt !== "number") return false;
+  if (maxAgeMs > 0 && Date.now() - entry.cachedAt > maxAgeMs) return false;
+  return true;
+}
+
+export function reconstructToolMetadata(
+  serverName: string,
+  entry: ServerCacheEntry,
+  prefix: "server" | "none" | "short",
+  definition: Pick<ServerEntry, "exposeResources" | "excludeTools">
+): ToolMetadata[] {
+  const metadata: ToolMetadata[] = [];
+
+  for (const tool of entry.tools ?? []) {
+    if (!tool?.name) continue;
+    if (isToolExcluded(tool.name, serverName, prefix, definition.excludeTools)) {
+      continue;
+    }
+
+    metadata.push({
+      name: formatToolName(tool.name, serverName, prefix),
+      originalName: tool.name,
+      description: tool.description ?? "",
+      inputSchema: tool.inputSchema,
+      uiResourceUri: tool.uiResourceUri,
+    });
+  }
+
+  if (definition.exposeResources !== false) {
+    for (const resource of entry.resources ?? []) {
+      if (!resource?.name || !resource?.uri) continue;
+      const baseName = `get_${resourceNameToToolName(resource.name)}`;
+      if (isToolExcluded(baseName, serverName, prefix, definition.excludeTools)) {
+        continue;
+      }
+
+      metadata.push({
+        name: formatToolName(baseName, serverName, prefix),
+        originalName: baseName,
+        description: resource.description ?? `Read resource: ${resource.uri}`,
+        resourceUri: resource.uri,
+      });
+    }
+  }
+
+  return metadata;
+}
+
+export function serializeTools(tools: McpTool[]): CachedTool[] {
+  return tools
+    .filter(t => t?.name)
+    .map(t => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      // uiResourceUri not extracted in standalone mode
+    }));
+}
+
+export function serializeResources(resources: McpResource[]): CachedResource[] {
+  return resources
+    .filter(r => r?.name && r?.uri)
+    .map(r => ({
+      uri: r.uri,
+      name: r.name,
+      description: r.description,
+    }));
+}
+
+function resourceNameToToolName(name: string): string {
+  let result = name
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+/, "")
+    .replace(/_+$/, "")
+    .toLowerCase();
+  if (!result || /^\d/.test(result)) {
+    result = "resource" + (result ? "_" + result : "");
+  }
+  return result;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined || typeof value !== "object") {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? "undefined" : serialized;
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(v => stableStringify(v)).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+}
