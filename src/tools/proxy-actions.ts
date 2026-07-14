@@ -780,13 +780,7 @@ export async function executeCall(
       };
     }
 
-    // TEMP DEBUG: Log raw result for investigation
-    logger.error(`[DEBUG TOOL CALL] ${serverName}/${toolMeta.originalName} raw result: ${JSON.stringify(result, null, 2).substring(0, 50000)}`);
-
     const content = resolveMcpResultContent(result as Record<string, unknown>);
-
-    // TEMP DEBUG: Log processed content
-    logger.error(`[DEBUG TOOL CALL] ${serverName}/${toolMeta.originalName} content blocks: ${JSON.stringify(content, null, 2).substring(0, 10000)}`);
     const outputContent = content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }];
     const guarded = await guardMcpOutput(outputContent, { ...outputGuardOptions, rawMcpResult: result });
     return {
