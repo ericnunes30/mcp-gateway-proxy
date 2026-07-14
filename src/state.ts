@@ -42,14 +42,25 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
     failureTracker,
   };
 
+  // Defer all heavy work so createGatewayState resolves immediately
+  // (MCP clients like Codex timeout if initialize is blocked)
+  process.nextTick(() => {
+    bootstrapState(state, config, signal).catch((err) => {
+      logger.error(`MCP: Background init failed: ${err}`);
+    });
+  });
+
+  return state;
+}
+
+/** Background bootstrap — never blocks the caller. */
+async function bootstrapState(state: GatewayState, config: McpConfig, signal?: AbortSignal): Promise<void> {
   const serverEntries = Object.entries(config.mcpServers);
-  if (serverEntries.length === 0) {
-    return state;
-  }
+  if (serverEntries.length === 0) return;
 
   // Set global idle timeout
   const idleSetting = typeof config.settings?.idleTimeout === "number" ? config.settings.idleTimeout : 10;
-  lifecycle.setGlobalIdleTimeout(idleSetting);
+  state.lifecycle.setGlobalIdleTimeout(idleSetting);
 
   // Load or bootstrap cache
   const cache = loadMetadataCache();
@@ -63,23 +74,23 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
   for (const [name, definition] of serverEntries) {
     const lifecycleMode = definition.lifecycle ?? "lazy";
     const idleOverride = definition.idleTimeout ?? (lifecycleMode === "eager" ? 0 : undefined);
-    lifecycle.registerServer(
+    state.lifecycle.registerServer(
       name,
       definition,
       idleOverride !== undefined ? { idleTimeout: idleOverride } : undefined,
     );
     if (lifecycleMode === "keep-alive") {
-      lifecycle.markKeepAlive(name, definition);
+      state.lifecycle.markKeepAlive(name, definition);
     }
 
     const currentCache = loadMetadataCache();
     if (currentCache?.servers?.[name] && isServerCacheValid(currentCache.servers[name], definition)) {
       const metadata = reconstructToolMetadata(name, currentCache.servers[name], prefix, definition);
-      toolMetadata.set(name, metadata);
+      state.toolMetadata.set(name, metadata);
     }
   }
 
-  // Connect eager + keep-alive servers in background (do NOT block initialize)
+  // Connect eager + keep-alive servers in background
   const startupServers = serverEntries.filter(([, definition]) => {
     const mode = definition.lifecycle ?? "lazy";
     return mode === "keep-alive" || mode === "eager";
@@ -88,10 +99,9 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
   if (startupServers.length > 0) {
     logger.info(`MCP: connecting to ${startupServers.length} servers...`);
 
-    // Fire-and-forget: don't block state creation on server connections
     parallelLimit(startupServers, 10, async ([name, definition]) => {
       try {
-        const connection = await manager.connect(name, definition, signal);
+        const connection = await state.manager.connect(name, definition, signal);
         if (connection.status === "needs-auth") {
           logger.warn(`MCP: ${name} requires OAuth authentication`);
           return;
@@ -110,19 +120,17 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
   }
 
   // Set up lifecycle callbacks
-  lifecycle.setReconnectCallback((serverName) => {
+  state.lifecycle.setReconnectCallback((serverName) => {
     updateServerMetadata(state, serverName);
     updateMetadataCache(state, serverName);
-    failureTracker.delete(serverName);
+    state.failureTracker.delete(serverName);
   });
 
-  lifecycle.setIdleShutdownCallback((serverName) => {
+  state.lifecycle.setIdleShutdownCallback((serverName) => {
     logger.debug(`${serverName} shut down (idle)`);
   });
 
-  lifecycle.startHealthChecks();
-
-  return state;
+  state.lifecycle.startHealthChecks();
 }
 
 export async function shutdownGatewayState(state: GatewayState): Promise<void> {
