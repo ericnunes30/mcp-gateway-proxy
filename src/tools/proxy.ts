@@ -81,21 +81,46 @@ export async function executeProxy(
     }
   }
 
+  // Support clients that pass all params inside args (e.g., Pi with pi-mcp-extension)
+  const action = params.action ?? (parsedArgs?.action as string | undefined);
+  const tool = params.tool ?? (parsedArgs?.tool as string | undefined);
+  const connect = params.connect ?? (parsedArgs?.connect as string | undefined);
+  const describe = params.describe ?? (parsedArgs?.describe as string | undefined);
+  const search = params.search ?? (parsedArgs?.search as string | undefined);
+  const server = params.server ?? (parsedArgs?.server as string | undefined);
+  const regex = params.regex ?? (parsedArgs?.regex as boolean | undefined);
+  const includeSchemas = params.includeSchemas ?? (parsedArgs?.includeSchemas as boolean | undefined);
+
+  // For tool args: if tool came from parsedArgs, extract nested args field
+  let toolArgs: Record<string, unknown> | undefined = parsedArgs;
+  if (!params.tool && parsedArgs && typeof parsedArgs === "object") {
+    const nestedArgs = parsedArgs.args;
+    if (typeof nestedArgs === "string") {
+      try {
+        toolArgs = JSON.parse(nestedArgs);
+      } catch {
+        toolArgs = undefined;
+      }
+    } else if (typeof nestedArgs === "object" && nestedArgs !== null) {
+      toolArgs = nestedArgs as Record<string, unknown>;
+    }
+  }
+
   // Dispatch based on params — priority: action > tool (call) > connect > describe > search > server (list) > nothing (status)
-  if (params.action === "ui-messages") {
+  if (action === "ui-messages") {
     return executeUiMessages(state);
   }
-  if (params.action === "auth-start") {
-    if (!params.server) {
+  if (action === "auth-start") {
+    if (!server) {
       return {
         content: [{ type: "text", text: "auth-start requires `server`. Example: mcp({ action: \"auth-start\", server: \"linear-server\" })" }],
         details: { mode: "auth-start", error: "missing_server" },
       };
     }
-    return executeAuthStart(state, params.server);
+    return executeAuthStart(state, server);
   }
-  if (params.action === "auth-complete") {
-    if (!params.server) {
+  if (action === "auth-complete") {
+    if (!server) {
       return {
         content: [{ type: "text", text: "auth-complete requires `server`." }],
         details: { mode: "auth-complete", error: "missing_server" },
@@ -108,22 +133,22 @@ export async function executeProxy(
         details: { mode: "auth-complete", error: "missing_input" },
       };
     }
-    return executeAuthComplete(state, params.server, input);
+    return executeAuthComplete(state, server, input);
   }
-  if (params.tool) {
-    return executeCall(state, params.tool, parsedArgs, params.server, signal);
+  if (tool) {
+    return executeCall(state, tool, toolArgs, server, signal);
   }
-  if (params.connect) {
-    return executeConnect(state, params.connect, signal);
+  if (connect) {
+    return executeConnect(state, connect, signal);
   }
-  if (params.describe) {
-    return executeDescribe(state, params.describe);
+  if (describe) {
+    return executeDescribe(state, describe);
   }
-  if (params.search) {
-    return executeSearch(state, params.search, params.regex, params.server, params.includeSchemas);
+  if (search) {
+    return executeSearch(state, search, regex, server, includeSchemas);
   }
-  if (params.server) {
-    return executeList(state, params.server);
+  if (server) {
+    return executeList(state, server);
   }
   return executeStatus(state);
 }
