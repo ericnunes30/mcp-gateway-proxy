@@ -9,6 +9,7 @@ import { resolveMcpResultContent, transformMcpContent } from "./tool-registrar.t
 import { guardMcpOutput, guardedMcpDetails, resolveMcpOutputGuardOptions } from "../guard/output-guard.ts";
 import { truncateAtWord, formatAuthRequiredMessage } from "../utils/utils.ts";
 import { authenticate, completeAuthFromInput, startAuth, supportsOAuth } from "../auth/oauth-flow.ts";
+import { logger } from "../utils/logger.ts";
 
 type ProxyToolResult = {
   content: ContentBlock[];

@@ -695,9 +695,9 @@ function formatContext(context) {
   }
   return parts.length > 0 ? `(${parts.join(", ")})` : "";
 }
-var logger2 = new Logger();
+var logger = new Logger();
 if (process.env.MCP_TOOL_SEARCH_DEBUG === "1" || process.env.MCP_TOOL_SEARCH_DEBUG === "true") {
-  logger2.setLevel("debug");
+  logger.setLevel("debug");
 }
 
 // src/auth/oauth-provider.ts
@@ -1821,7 +1821,7 @@ var McpServerManager = class {
         if (resolved) {
           command = resolved.isJs ? "node" : resolved.binPath;
           args = resolved.isJs ? [resolved.binPath, ...resolved.extraArgs] : resolved.extraArgs;
-          logger2.debug(`${name} resolved to ${resolved.binPath} (skipping npm parent)`);
+          logger.debug(`${name} resolved to ${resolved.binPath} (skipping npm parent)`);
         }
       }
       transport = new StdioClientTransport({
@@ -2075,7 +2075,7 @@ var McpLifecycleManager = class {
   startHealthChecks(intervalMs = 3e4) {
     this.healthCheckInterval = setInterval(() => {
       this.checkConnections().catch((error) => {
-        logger2.error("MCP: Health check failed", error instanceof Error ? error : new Error(String(error)));
+        logger.error("MCP: Health check failed", error instanceof Error ? error : new Error(String(error)));
       });
     }, intervalMs);
     this.healthCheckInterval.unref();
@@ -2086,10 +2086,10 @@ var McpLifecycleManager = class {
       if (!connection || connection.status !== "connected") {
         try {
           await this.manager.connect(name, definition);
-          logger2.debug(`Reconnected to ${name}`);
+          logger.debug(`Reconnected to ${name}`);
           this.onReconnect?.(name);
         } catch (error) {
-          logger2.error(`MCP: Failed to reconnect to ${name}:`, error instanceof Error ? error : new Error(String(error)));
+          logger.error(`MCP: Failed to reconnect to ${name}:`, error instanceof Error ? error : new Error(String(error)));
         }
       }
     }
@@ -2521,7 +2521,7 @@ async function lazyConnect(state2, serverName, signal) {
     }
     state2.failureTracker.set(serverName, Date.now());
     const message = error instanceof Error ? error.message : String(error);
-    logger2.debug(`MCP: lazy connect failed for ${serverName}: ${message}`);
+    logger.debug(`MCP: lazy connect failed for ${serverName}: ${message}`);
     return false;
   }
 }
@@ -2575,7 +2575,7 @@ async function createGatewayState(options) {
     return mode === "keep-alive" || mode === "eager";
   });
   if (startupServers.length > 0) {
-    logger2.info(`MCP: connecting to ${startupServers.length} servers...`);
+    logger.info(`MCP: connecting to ${startupServers.length} servers...`);
     const results = await parallelLimit(startupServers, 10, async ([name, definition]) => {
       try {
         const connection = await manager.connect(name, definition, signal);
@@ -2590,7 +2590,7 @@ async function createGatewayState(options) {
     });
     for (const { name, ok, error } of results) {
       if (!ok) {
-        logger2.error(`MCP: Failed to connect to ${name}: ${error}`);
+        logger.error(`MCP: Failed to connect to ${name}: ${error}`);
         continue;
       }
       const connection = manager.getConnection(name);
@@ -2606,7 +2606,7 @@ async function createGatewayState(options) {
     failureTracker.delete(serverName);
   });
   lifecycle.setIdleShutdownCallback((serverName) => {
-    logger2.debug(`${serverName} shut down (idle)`);
+    logger.debug(`${serverName} shut down (idle)`);
   });
   lifecycle.startHealthChecks();
   return state2;
@@ -4200,7 +4200,7 @@ var state = null;
 async function startServer(overridePath) {
   const configPath = overridePath ?? getConfigFromArgv();
   const config = loadMcpConfig(configPath);
-  logger2.info("MCP: starting mcp-tool-search server...");
+  logger.info("MCP: starting mcp-tool-search server...");
   state = await createGatewayState({ config });
   const server2 = new Server(
     {
@@ -4216,13 +4216,13 @@ async function startServer(overridePath) {
   registerListToolsHandler(server2, state, config);
   registerCallToolHandler(server2, () => state, config);
   server2.oninitialized = () => {
-    logger2.info("MCP: client connected");
+    logger.info("MCP: client connected");
   };
   const transport = new StdioServerTransport();
   await server2.connect(transport);
-  logger2.info("MCP: server ready on stdio");
+  logger.info("MCP: server ready on stdio");
   const shutdown = async () => {
-    logger2.info("MCP: shutting down...");
+    logger.info("MCP: shutting down...");
     if (state) {
       flushMetadataCache(state);
       await shutdownGatewayState(state);
@@ -4240,13 +4240,13 @@ async function main() {
     await startServer(configPath ?? void 0);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger2.error(`Fatal error: ${message}`);
+    logger.error(`Fatal error: ${message}`);
     process.exit(1);
   }
 }
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  logger2.error(`Unhandled error: ${message}`);
+  logger.error(`Unhandled error: ${message}`);
   process.exit(1);
 });
 //# sourceMappingURL=cli.js.map
