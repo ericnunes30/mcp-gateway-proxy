@@ -94,12 +94,19 @@ Add to `claude_desktop_config.json`:
 
 #### Claude Code
 
+Claude Code reads MCP server config from `~/.claude.json` (home directory), not `.claude/settings.json`. On Windows, use the absolute path to `node.exe`.
+
 ```json
 {
   "mcpServers": {
     "mcp-tool-search": {
-      "command": "npx",
-      "args": ["mcp-tool-search", "--mcp-config", "/path/to/config.json"]
+      "type": "stdio",
+      "command": "C:/Program Files/nodejs/node.exe",
+      "args": [
+        "G:/novosApps/mcp-tool-search/dist/cli.js",
+        "--mcp-config",
+        "C:/Users/Eric/.config/mcp-tool-search/config.json"
+      ]
     }
   }
 }
