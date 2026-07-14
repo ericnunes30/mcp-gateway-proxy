@@ -79,7 +79,7 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
     }
   }
 
-  // Connect eager + keep-alive servers in parallel
+  // Connect eager + keep-alive servers in background (do NOT block initialize)
   const startupServers = serverEntries.filter(([, definition]) => {
     const mode = definition.lifecycle ?? "lazy";
     return mode === "keep-alive" || mode === "eager";
@@ -88,30 +88,25 @@ export async function createGatewayState(options: CreateStateOptions): Promise<G
   if (startupServers.length > 0) {
     logger.info(`MCP: connecting to ${startupServers.length} servers...`);
 
-    const results = await parallelLimit(startupServers, 10, async ([name, definition]) => {
+    // Fire-and-forget: don't block state creation on server connections
+    parallelLimit(startupServers, 10, async ([name, definition]) => {
       try {
         const connection = await manager.connect(name, definition, signal);
         if (connection.status === "needs-auth") {
-          return { name, ok: false, error: "OAuth authentication required" };
+          logger.warn(`MCP: ${name} requires OAuth authentication`);
+          return;
         }
-        return { name, ok: true, error: null };
+        if (connection.status === "connected") {
+          updateServerMetadata(state, name);
+          updateMetadataCache(state, name);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { name, ok: false, error: message };
+        logger.error(`MCP: Failed to connect to ${name}: ${message}`);
       }
+    }).catch(() => {
+      // Ignore background connection errors
     });
-
-    for (const { name, ok, error } of results) {
-      if (!ok) {
-        logger.error(`MCP: Failed to connect to ${name}: ${error}`);
-        continue;
-      }
-      const connection = manager.getConnection(name);
-      if (connection && connection.status === "connected") {
-        updateServerMetadata(state, name);
-        updateMetadataCache(state, name);
-      }
-    }
   }
 
   // Set up lifecycle callbacks
