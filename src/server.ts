@@ -9,24 +9,39 @@ import { registerCallToolHandler } from "./handlers/call-tool.ts";
 import { flushMetadataCache } from "./lifecycle/lazy-connect.ts";
 import { logger } from "./utils/logger.ts";
 import { getConfigFromArgv } from "./utils/utils.ts";
+import { appendFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 let state: GatewayState | null = null;
 
+// Debug log file — persistent across process restarts
+const debugLogFile = join(homedir(), ".config", "mcp-tool-search", "server-debug.log");
+
+function debugLog(...args: unknown[]): void {
+  const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}`;
+  console.error(line);
+  try {
+    appendFileSync(debugLogFile, line + "\n");
+  } catch {
+    // ignore write errors
+  }
+}
+
 export async function startServer(overridePath?: string): Promise<void> {
+  debugLog("PROCESS STARTED — pid=", process.pid, "node=", process.version);
+
   const t0 = Date.now();
   const configPath = overridePath ?? getConfigFromArgv();
-  const t1 = Date.now();
-  logger.info(`[TIMING] getConfigFromArgv: ${t1 - t0}ms`);
+  debugLog("[TIMING] getConfigFromArgv:", Date.now() - t0, "ms");
 
   const config = loadMcpConfig(configPath);
-  const t2 = Date.now();
-  logger.info(`[TIMING] loadMcpConfig: ${t2 - t1}ms`);
+  debugLog("[TIMING] loadMcpConfig:", Date.now() - t0, "ms");
 
-  logger.info("MCP: starting mcp-tool-search server...");
+  debugLog("MCP: starting mcp-tool-search server...");
 
   state = await createGatewayState({ config });
-  const t3 = Date.now();
-  logger.info(`[TIMING] createGatewayState: ${t3 - t2}ms`);
+  debugLog("[TIMING] createGatewayState:", Date.now() - t0, "ms");
 
   const server = new Server(
     {
@@ -39,35 +54,34 @@ export async function startServer(overridePath?: string): Promise<void> {
       },
     },
   );
-  const t4 = Date.now();
-  logger.info(`[TIMING] new Server: ${t4 - t3}ms`);
+  debugLog("[TIMING] new Server:", Date.now() - t0, "ms");
 
   registerListToolsHandler(server, state, config);
   registerCallToolHandler(server, () => state, config);
-  const t5 = Date.now();
-  logger.info(`[TIMING] register handlers: ${t5 - t4}ms`);
+  debugLog("[TIMING] register handlers:", Date.now() - t0, "ms");
 
-  // Log client info on initialize
+  // Log when initialize is completed (called by SDK after handling initialize)
   server.oninitialized = () => {
-    const tInit = Date.now();
-    logger.info(`[TIMING] oninitialized called at ${tInit - t0}ms from start`);
-    logger.info("MCP: client connected");
+    debugLog("[TIMING] oninitialized called at", Date.now() - t0, "ms from start");
+    debugLog("MCP: client connected — server state ready");
   };
 
   const transport = new StdioServerTransport();
-  const t6 = Date.now();
-  logger.info(`[TIMING] new StdioServerTransport: ${t6 - t5}ms`);
+  debugLog("[TIMING] new StdioServerTransport:", Date.now() - t0, "ms");
 
   await server.connect(transport);
-  const t7 = Date.now();
-  logger.info(`[TIMING] server.connect(transport): ${t7 - t6}ms`);
+  debugLog("[TIMING] server.connect(transport):", Date.now() - t0, "ms");
+  debugLog("[TIMING] TOTAL startup:", Date.now() - t0, "ms");
+  debugLog("MCP: server ready on stdio");
 
-  logger.info(`[TIMING] TOTAL startup: ${t7 - t0}ms`);
-  logger.info("MCP: server ready on stdio");
+  // Heartbeat to confirm process stays alive
+  setInterval(() => {
+    debugLog("HEARTBEAT — alive for", Date.now() - t0, "ms");
+  }, 3000);
 
   // Handle graceful shutdown
   const shutdown = async () => {
-    logger.info("MCP: shutting down...");
+    debugLog("MCP: shutting down...");
     if (state) {
       flushMetadataCache(state);
       await shutdownGatewayState(state);
