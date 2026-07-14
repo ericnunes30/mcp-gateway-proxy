@@ -101,7 +101,7 @@ Claude Code reads MCP server config from `~/.claude.json` (home directory), not 
   "mcpServers": {
     "mcp-tool-search": {
       "type": "stdio",
-      "command": "C:/Program Files/nodejs/node.exe",
+      "command": "C:/PROGRA~1/nodejs/node.exe",
       "args": [
         "G:/novosApps/mcp-tool-search/dist/cli.js",
         "--mcp-config",
