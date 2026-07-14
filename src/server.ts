@@ -13,12 +13,20 @@ import { getConfigFromArgv } from "./utils/utils.ts";
 let state: GatewayState | null = null;
 
 export async function startServer(overridePath?: string): Promise<void> {
+  const t0 = Date.now();
   const configPath = overridePath ?? getConfigFromArgv();
+  const t1 = Date.now();
+  logger.info(`[TIMING] getConfigFromArgv: ${t1 - t0}ms`);
+
   const config = loadMcpConfig(configPath);
+  const t2 = Date.now();
+  logger.info(`[TIMING] loadMcpConfig: ${t2 - t1}ms`);
 
   logger.info("MCP: starting mcp-tool-search server...");
 
   state = await createGatewayState({ config });
+  const t3 = Date.now();
+  logger.info(`[TIMING] createGatewayState: ${t3 - t2}ms`);
 
   const server = new Server(
     {
@@ -31,18 +39,30 @@ export async function startServer(overridePath?: string): Promise<void> {
       },
     },
   );
+  const t4 = Date.now();
+  logger.info(`[TIMING] new Server: ${t4 - t3}ms`);
 
   registerListToolsHandler(server, state, config);
   registerCallToolHandler(server, () => state, config);
+  const t5 = Date.now();
+  logger.info(`[TIMING] register handlers: ${t5 - t4}ms`);
 
   // Log client info on initialize
   server.oninitialized = () => {
+    const tInit = Date.now();
+    logger.info(`[TIMING] oninitialized called at ${tInit - t0}ms from start`);
     logger.info("MCP: client connected");
   };
 
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const t6 = Date.now();
+  logger.info(`[TIMING] new StdioServerTransport: ${t6 - t5}ms`);
 
+  await server.connect(transport);
+  const t7 = Date.now();
+  logger.info(`[TIMING] server.connect(transport): ${t7 - t6}ms`);
+
+  logger.info(`[TIMING] TOTAL startup: ${t7 - t0}ms`);
   logger.info("MCP: server ready on stdio");
 
   // Handle graceful shutdown
